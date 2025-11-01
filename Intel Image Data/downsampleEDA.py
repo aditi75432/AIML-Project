@@ -1,48 +1,72 @@
 import os
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import random
+import shutil
 from PIL import Image
-import cv2
+import matplotlib.pyplot as plt
 
-# Set the data path and get the list of categories, there are total of 6 categories
-data_path = "archive/seg_train/seg_train"
-data_categories = sorted(os.listdir(data_path))
+# CONFIG
+data_path = "archive/seg_train/seg_train"         # original dataset
+output_path = "archive/downsampled_seg_train"     # new downsampled dataset
+target_count = 1000                               # images per category
+target_size = (64, 64)                            # resize target
+random_seed = 42                                  # reproducibility
 
-# Display the number of image in each category each category has more than 2000 images hence we can say they are equally distributed
+random.seed(random_seed)
+
+# Output directory 
+os.makedirs(output_path, exist_ok=True)
+
+# Get list of category folders
+data_categories = sorted([d for d in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, d))])
+print("Detected categories:", data_categories, "\n")
+
+selected_per_category = {}
+
+# Randomly select and resize 
 for category in data_categories:
     category_path = os.path.join(data_path, category)
-    print(f"{category} images: {len(os.listdir(category_path))}")
+    output_category_path = os.path.join(output_path, category)
+    os.makedirs(output_category_path, exist_ok=True)
     
-# Downsample images to 64x64 for faster processing
-target_size = (64, 64)
-
-for category in data_categories:
-    category_path = os.path.join(data_path, category)
-
-    for img_name in os.listdir(category_path):
-        img_path = os.path.join(category_path, img_name)
-        
-        img = Image.open(img_path).convert("RGB")
+    # Collect all .jpg/.JPG files
+    all_images = [f for f in os.listdir(category_path)
+                  if os.path.isfile(os.path.join(category_path, f)) and f.lower().endswith(".jpg")]
+    
+    n_total = len(all_images)
+    
+    k = min(target_count, n_total)
+    sampled_images = random.sample(all_images, k)
+    selected_per_category[category] = sampled_images
+    
+    print(f"{category}: selected {k} of {n_total} images.")
+    
+    # Resize and save in new folder
+    for img_name in sampled_images:
+        src_path = os.path.join(category_path, img_name)
+        dst_path = os.path.join(output_category_path, img_name)
+        img = Image.open(src_path).convert("RGB")
         img = img.resize(target_size)
-        img.save(img_path)  
+        img.save(dst_path)
 
-# Display one sample image from each category to verify resizing
-plt.figure(figsize=(10, 5))
+# Display one sample image per category 
+plt.figure(figsize=(10, 6))
+cols = 3
+rows = (len(data_categories) + cols - 1) // cols
 
 for i, category in enumerate(data_categories, 1):
-    category_path = os.path.join(data_path, category)
-    if not os.path.isdir(category_path):
+    output_category_path = os.path.join(output_path, category)
+    if not os.path.exists(output_category_path):
         continue
-    first_img_name = os.listdir(category_path)[0]
-    img_path = os.path.join(category_path, first_img_name)
-    
+
+    # pick first image
+    first_img_name = os.listdir(output_category_path)[0]
+    img_path = os.path.join(output_category_path, first_img_name)
+
     img = Image.open(img_path)
-    plt.subplot(2, 3, i)
+    plt.subplot(rows, cols, i)
     plt.imshow(img)
     plt.title(category)
     plt.axis("off")
 
 plt.tight_layout()
 plt.show()
-
